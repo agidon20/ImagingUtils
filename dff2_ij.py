@@ -10,6 +10,7 @@ from glob import glob
 from ij.gui import Plot
 
 # Import Apache Commons Math classes
+# add to your plugins dir (i.e., (Fiji.app/plugins") the commons-math3-3.6.1 (you can try other versions, but I didn't)
 from org.apache.commons.math3.fitting import CurveFitter
 from org.apache.commons.math3.fitting import WeightedObservedPoints
 from org.apache.commons.math3.analysis import ParametricUnivariateFunction
@@ -39,11 +40,13 @@ def remove_slices(imp, rng):
         stack.deleteSlice(r)  # remove from the end to not change indexes
         imp.setStack(stack)  # without this line deleteSlice will not work properly
 
-def imp_open(rng):
-	fname = glob('*.tif')[0]
-	imp = duplicate_imageplus(os.getcwd() + "\\" + fname)  # do not work on the original file. too risky
-	remove_slices(imp, rng)  # remove all the slices that are noise (mostly before and after recordings)
-	return imp
+def imp_open(tiff_dir,rng):
+    #only one tif file in this folder.
+    fname = glob(tiff_dir + '\\*.tif')[0]
+    print("filename:" + fname)
+    imp = duplicate_imageplus(fname)  # do not work on the original file. too risky
+    remove_slices(imp, rng)  # remove all the slices that are noise (mostly before and after recordings)
+    return imp
 
 def mean(imp, label):
     roi = roiman.getROIs()[label]
@@ -102,34 +105,36 @@ def stack_mean_roi(imp):
         bg.add(mean(imp, "bg"))
     return t, f, bg
 
-def dff(exp_dir, cell, repetitions, slices_to_remove, stim_start, folder, folderRoi):
+def dff(imaging_dir, cell, state, sweeps, slices_to_remove, stim_start, folderRoi):
     t, f, bg = ArrayList(), ArrayList(), ArrayList()
-    for id in repetitions:
-        os.chdir(exp_dir + cell + "_" + str(id))
-        if folderRoi == ".":
-            roiman.runCommand("Open", "./RoiSet.zip")
-        else:
-            roiman.runCommand("Open", exp_dir + folderRoi + "/RoiSet.zip")
-        imp = imp_open(slices_to_remove)
+    for sweep in sweeps:
+        folder = os.path.join(imaging_dir , "cell" + str(cell) , "state"  +  str(state) , "sweep" + str(sweep))
+        print(folder)
+        if(folderRoi == "*"):
+            roifile = os.path.join(imaging_dir,"cell" + str(cell),"RoiSet.zip")
+            roiman.runCommand("Open", roifile) 
+        else:   
+            roifile = os.path.join(imaging_dir,folderRoi,"RoiSet.zip")
+            roiman.runCommand("Open", roifile)
+        imp = imp_open( folder,slices_to_remove)
         t, f1, bg1 = stack_mean_roi(imp)
         if f.isEmpty():
             f = f1
         else:
             for i in range(len(f)):
-                f.set(i, f.get(i) + f1.get(i) / len(repetitions))
+                f.set(i, f.get(i) + f1.get(i) / len(sweeps))
         if bg.isEmpty():
             bg = bg1
         else:
             for i in range(len(bg)):
-                bg.set(i, bg.get(i) + bg1.get(i) / len(repetitions))
+                bg.set(i, bg.get(i) + bg1.get(i) / len(sweeps))
         imp.close()
         roiman.runCommand("Delete")
     f0 = fit_f0(stim_start, t, f)  # f0 is the fitted version to remove bleaching
     return t, [(f.get(i) - f0[i]) / (f0[i] - bg.get(i)) for i in range(len(f))], f, bg, f0
 
-def save_data(dir1, cell, t,dff1):
-	os.chdir(dir1)
-	filename = os.path.join(dir1, cell + ".er.txt")
+def save_data(dirname, filename, t,dff1):
+	filename = os.path.join(dirname, filename + ".data.txt")
 	with open(filename, "w") as f:
 		for i in range(len(t)):
 			f.write( str(t[i]) + " " + str(dff1[i]) + "\n")
@@ -159,20 +164,17 @@ def plot_data(t, dff1, f, bg, f0):
 
 
 
-ephys_dir = "C:/port/hudrive/OneDrive - hu-berlin.de/lab/sfv/ephys/"
-exp_dirs = [
-    ephys_dir + "sfv190321/Sina_SFV_Ccamp/",
-    ephys_dir + "sfv190516/imaging/"
-]
-imagej_dir = "C:/port/hudrive/OneDrive - hu-berlin.de/lab/sfv/imaging/analisys/Fiji.app"
-plugins_dir = "C:/port/hudrive/OneDrive - hu-berlin.de/lab/sfv/imaging/analisys/Fiji.app/plugins"
-save_data_dir = "C:/port/hudrive/OneDrive - hu-berlin.de/lab/sfv/imaging/withephys"
 
-# [cellid, repetitions, slices to remove, stimulus first time, folder, folderroi]
-cell = (ephys_dir + "20231122/imaging/", "C4S14", [1, 2, 3, 4, 5], list([1,2]), 15, "231122", "C4S12_1")
-
-
+print (os.getcwd())
+imaging_dir = "C:\\port\\hudrive\\OneDrive - hu-berlin.de\\lab\\lspikes\\imaging\\" # relative to the folder where this python file is saved.
+save_data_dir = ".\\data\\"
 initialize_imagej()
+
+# # [cellid, state, sweep, slices to remove, stimulus first time, folderroi]
+cell = (imaging_dir,3, 12, [1,], list([1,2]), 15, "*")
 t, dff1, f, bg, f0 = dff(*cell)
+
 plot_data(t,dff1, f, bg, f0)
-save_data(".", cell[5] + cell[1], t, dff1)
+save_dir = os.path.join(imaging_dir,"cell" + str(cell[1]) )
+save_data(save_dir, "imaging_results", t, dff1)
+save_data(save_dir, "imaging_results.f0", t, f0)
