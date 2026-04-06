@@ -56,7 +56,7 @@ def mean(imp, label):
 
 
 
-class ExpFunc(ParametricUnivariateFunction):
+class ExpFunc2(ParametricUnivariateFunction):
     def value(self, x, params):
         a, b, c, k, l = params
         return a * Math.exp(-x / b) + k * Math.exp(-x / l) + c
@@ -70,17 +70,36 @@ class ExpFunc(ParametricUnivariateFunction):
         dl = k * x / (l * l) * Math.exp(-x / l)
         return [da, db, dc, dk, dl]
 
+    def size(self):
+    	return 5
+
+class ExpFunc1(ParametricUnivariateFunction):
+    def value(self, x, params):
+        a, b, c = params
+        return a * Math.exp(-x / b) + c 
+
+    def gradient(self, x, params):
+        a, b, c = params
+        da = Math.exp(-x / b)
+        db = a * x / (b * b) * Math.exp(-x / b)
+        dc = 1.0
+        return [da, db, dc]
+
+    def size(self):
+    	return 3
+                
+
 def fit_f0(stim_start, t, f):
     xfit = ArrayList()
     for i in range(stim_start):
         xfit.add(t[i])
-    for i in range(len(t)-3, len(t)-1):
+    for i in range(len(t)-15, len(t)-1):
         xfit.add(t[i])
     
     yfit = ArrayList()
     for i in range(stim_start):
         yfit.add(f[i])
-    for i in range(len(f)-3, len(f)-1):
+    for i in range(len(f)-15, len(f)-1):
         yfit.add(f[i])
 
     optimizer = LevenbergMarquardtOptimizer()
@@ -88,11 +107,19 @@ def fit_f0(stim_start, t, f):
     for i in range(len(xfit)):
         fitter.addObservedPoint(xfit[i], yfit[i])
 
-    initial_guess = [1.0, 1.0, 1.0, 1.0, 1.0]
-    params = fitter.fit(ExpFunc(), initial_guess)
-
-    print("fit: a=%5.3f, b=%5.3f, c=%5.3f, k=%5.3f, l=%5.3f" % tuple(params))
-    return [ExpFunc().value(x, params) for x in t]
+	if(ExpFunc2().size() == 5):
+		initial_guess = [1.0, 1.0, 1.0, 1.0, 1.0]
+	if(ExpFunc2().size() == 3):
+		initial_guess = [1.0, 1.0, 1.0]
+    params = fitter.fit(ExpFunc2(), initial_guess)
+    
+    if(ExpFunc2().size() == 5):
+    	print("fit: a=%5.3f, b=%5.3f, c=%5.3f, k=%5.3f, l=%5.3f" % tuple(params))
+    
+    if(ExpFunc2().size() == 3):
+		print("fit: a=%5.3f, b=%5.3f, c=%5.3f" % tuple(params))
+    
+    return [ExpFunc2().value(x, params) for x in t]
 
     
     
@@ -128,8 +155,9 @@ def dff(imaging_dir, cell, state, sweeps, slices_to_remove, stim_start, folderRo
         else:
             for i in range(len(bg)):
                 bg.set(i, bg.get(i) + bg1.get(i) / len(sweeps))
-        imp.close()
-        roiman.runCommand("Delete")
+        #imp.close()	
+        imp.show()
+       # roiman.runCommand("Delete")
     f0 = fit_f0(stim_start, t, f)  # f0 is the fitted version to remove bleaching
     return t, [(f.get(i) - f0[i]) / (f0[i] - bg.get(i)) for i in range(len(f))], f, bg, f0
 
@@ -166,12 +194,12 @@ def plot_data(t, dff1, f, bg, f0):
 
 
 print (os.getcwd())
-imaging_dir = "C:\\port\\hudrive\\OneDrive - hu-berlin.de\\lab\\lspikes\\imaging\\" # relative to the folder where this python file is saved.
+imaging_dir = "C:\\port\\hudrive\\OneDrive - hu-berlin.de\\lab\\lspikes2\\imaging\\" # relative to the folder where this python file is saved.
 save_data_dir = ".\\data\\"
 initialize_imagej()
 
 # # [cellid, state, sweep, slices to remove, stimulus first time, folderroi]
-cell = (imaging_dir,3, 12, [1,], list([1,2]), 15, "*")
+cell = (imaging_dir,3, 12, [1,], list([1,2,3,4,5,6]), 15, "*")
 t, dff1, f, bg, f0 = dff(*cell)
 
 plot_data(t,dff1, f, bg, f0)
